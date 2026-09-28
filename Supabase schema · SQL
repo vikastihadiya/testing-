@@ -1,0 +1,325 @@
+-- =====================================================================
+-- MANJU'S THE WORLD OF GLAMOUR — SUPABASE SCHEMA
+-- This file is the SINGLE SOURCE OF TRUTH for column names.
+-- app.js and admin.js are written to match these exact names.
+-- If you ever rename a column, update it here first, then grep the
+-- JS files for the old name before changing anything else.
+-- =====================================================================
+
+-- Needed for gen_random_uuid()
+create extension if not exists "pgcrypto";
+
+-- ---------------------------------------------------------------------
+-- CATEGORIES  (used by services for filtering)
+-- ---------------------------------------------------------------------
+create table if not exists categories (
+  id             uuid primary key default gen_random_uuid(),
+  name           text not null,
+  slug           text not null unique,
+  display_order  int  not null default 0,
+  created_at     timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- SERVICES
+-- category_id is a REAL foreign key (uuid), never a category name string.
+-- ---------------------------------------------------------------------
+create table if not exists services (
+  id                uuid primary key default gen_random_uuid(),
+  name              text not null,
+  category_id       uuid references categories(id) on delete set null,
+  description       text,
+  price             numeric,           -- null = "ask for pricing"
+  duration_minutes  int,               -- null = duration not set
+  image_url         text,
+  is_popular        boolean not null default false,
+  is_featured       boolean not null default false,
+  is_active         boolean not null default true,
+  created_at        timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- BRIDAL PACKAGES
+-- ---------------------------------------------------------------------
+create table if not exists bridal_packages (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  price       numeric,
+  includes    text[] not null default '{}',
+  is_active   boolean not null default true,
+  created_at  timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- OFFERS
+-- ---------------------------------------------------------------------
+create table if not exists offers (
+  id              uuid primary key default gen_random_uuid(),
+  name            text not null,
+  description     text,
+  original_price  numeric,
+  offer_price     numeric,
+  valid_until     date,               -- null = no expiry
+  is_active       boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- GALLERY  (one table, one shape — a type column instead of four tables)
+-- gallery_type: 'portfolio' | 'before_after' | 'bridal' | 'customer'
+-- For 'before_after' rows, before_image_url holds the "before" photo and
+-- image_url holds the "after" photo.
+-- ---------------------------------------------------------------------
+create table if not exists gallery (
+  id                uuid primary key default gen_random_uuid(),
+  gallery_type      text not null default 'portfolio'
+                       check (gallery_type in ('portfolio','before_after','bridal','customer')),
+  category          text,             -- e.g. 'Hair','Makeup','Bridal','Skin','Nails'
+  title             text,
+  image_url         text not null,
+  before_image_url  text,             -- only used when gallery_type = 'before_after'
+  is_featured       boolean not null default false,
+  display_order     int not null default 0,
+  created_at        timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- TEAM MEMBERS
+-- ---------------------------------------------------------------------
+create table if not exists team_members (
+  id              uuid primary key default gen_random_uuid(),
+  name            text not null,
+  role            text,
+  specialty       text,
+  experience      text,
+  photo_url       text,
+  is_active       boolean not null default true,
+  display_order   int not null default 0,
+  created_at      timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- TESTIMONIALS
+-- ---------------------------------------------------------------------
+create table if not exists testimonials (
+  id              uuid primary key default gen_random_uuid(),
+  customer_name   text not null,
+  testimonial     text not null,
+  service_name    text,
+  rating          int not null default 5 check (rating between 1 and 5),
+  is_approved     boolean not null default true,
+  created_at      timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- FAQS
+-- ---------------------------------------------------------------------
+create table if not exists faqs (
+  id              uuid primary key default gen_random_uuid(),
+  question        text not null,
+  answer          text not null,
+  display_order   int not null default 0,
+  created_at      timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- APPOINTMENTS  (public can INSERT only; never public SELECT)
+-- ---------------------------------------------------------------------
+create table if not exists appointments (
+  id               uuid primary key default gen_random_uuid(),
+  customer_name    text not null,
+  phone            text not null,
+  service_id       uuid references services(id) on delete set null,
+  preferred_date   date,
+  preferred_time   time,
+  status           text not null default 'New'
+                     check (status in ('New','Confirmed','Completed','Cancelled','No-show')),
+  notes            text,
+  source           text not null default 'Website',
+  created_at       timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- BRIDAL ENQUIRIES  (public can INSERT only; never public SELECT)
+-- ---------------------------------------------------------------------
+create table if not exists bridal_enquiries (
+  id                        uuid primary key default gen_random_uuid(),
+  bride_name                text not null,
+  phone                     text not null,
+  wedding_date              date,
+  function_type             text,
+  venue                     text,
+  number_of_functions       int,
+  makeup_style              text,
+  budget_range              text,
+  additional_requirements   text,
+  status                    text not null default 'New'
+                              check (status in ('New','Contacted','Confirmed','Closed')),
+  created_at                timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------
+-- SETTINGS  (key/value — exact columns: setting_key, setting_value)
+-- opening_hours is stored as a JSON string in setting_value.
+-- ---------------------------------------------------------------------
+create table if not exists settings (
+  setting_key    text primary key,
+  setting_value  text,
+  updated_at     timestamptz not null default now()
+);
+
+insert into settings (setting_key, setting_value) values
+  ('phone', ''),
+  ('whatsapp', ''),
+  ('email', ''),
+  ('instagram_url', ''),
+  ('address', 'Sector 3, Rohini, Delhi, 110085'),
+  ('maps_url', ''),
+  ('google_review_url', ''),
+  ('rating', ''),
+  ('review_count', ''),
+  ('opening_hours', '[{"day":"Monday – Saturday","time":"10:00 AM – 8:00 PM"},{"day":"Sunday","time":"11:00 AM – 6:00 PM"}]')
+on conflict (setting_key) do nothing;
+
+-- =====================================================================
+-- ROW LEVEL SECURITY
+-- Rule of thumb applied consistently everywhere below:
+--   - Public content tables: anon + authenticated can SELECT (only
+--     published/active rows where relevant); only authenticated can
+--     INSERT/UPDATE/DELETE.
+--   - appointments / bridal_enquiries: anon + authenticated can INSERT
+--     only; only authenticated can SELECT/UPDATE/DELETE.
+--   - settings: anon + authenticated can SELECT; only authenticated
+--     can UPDATE (no INSERT/DELETE needed — rows are seeded above).
+-- "authenticated" = the salon owner/staff, logged in via Supabase Auth.
+-- =====================================================================
+
+alter table categories        enable row level security;
+alter table services          enable row level security;
+alter table bridal_packages   enable row level security;
+alter table offers            enable row level security;
+alter table gallery           enable row level security;
+alter table team_members      enable row level security;
+alter table testimonials      enable row level security;
+alter table faqs              enable row level security;
+alter table appointments      enable row level security;
+alter table bridal_enquiries  enable row level security;
+alter table settings          enable row level security;
+
+-- ---- categories ----
+create policy "categories_public_select" on categories
+  for select to anon, authenticated using (true);
+create policy "categories_admin_all" on categories
+  for all to authenticated using (true) with check (true);
+
+-- ---- services ----
+create policy "services_public_select" on services
+  for select to anon, authenticated using (is_active = true);
+create policy "services_admin_all" on services
+  for all to authenticated using (true) with check (true);
+
+-- ---- bridal_packages ----
+create policy "bridal_packages_public_select" on bridal_packages
+  for select to anon, authenticated using (is_active = true);
+create policy "bridal_packages_admin_all" on bridal_packages
+  for all to authenticated using (true) with check (true);
+
+-- ---- offers ----
+create policy "offers_public_select" on offers
+  for select to anon, authenticated using (is_active = true);
+create policy "offers_admin_all" on offers
+  for all to authenticated using (true) with check (true);
+
+-- ---- gallery ----
+create policy "gallery_public_select" on gallery
+  for select to anon, authenticated using (true);
+create policy "gallery_admin_all" on gallery
+  for all to authenticated using (true) with check (true);
+
+-- ---- team_members ----
+create policy "team_members_public_select" on team_members
+  for select to anon, authenticated using (is_active = true);
+create policy "team_members_admin_all" on team_members
+  for all to authenticated using (true) with check (true);
+
+-- ---- testimonials ----
+create policy "testimonials_public_select" on testimonials
+  for select to anon, authenticated using (is_approved = true);
+create policy "testimonials_admin_all" on testimonials
+  for all to authenticated using (true) with check (true);
+
+-- ---- faqs ----
+create policy "faqs_public_select" on faqs
+  for select to anon, authenticated using (true);
+create policy "faqs_admin_all" on faqs
+  for all to authenticated using (true) with check (true);
+
+-- ---- settings ----
+create policy "settings_public_select" on settings
+  for select to anon, authenticated using (true);
+create policy "settings_admin_update" on settings
+  for update to authenticated using (true) with check (true);
+
+-- ---- appointments: public INSERT only, admin full access ----
+create policy "appointments_public_insert" on appointments
+  for insert to anon, authenticated with check (true);
+create policy "appointments_admin_select" on appointments
+  for select to authenticated using (true);
+create policy "appointments_admin_update" on appointments
+  for update to authenticated using (true) with check (true);
+create policy "appointments_admin_delete" on appointments
+  for delete to authenticated using (true);
+
+-- ---- bridal_enquiries: public INSERT only, admin full access ----
+create policy "bridal_enquiries_public_insert" on bridal_enquiries
+  for insert to anon, authenticated with check (true);
+create policy "bridal_enquiries_admin_select" on bridal_enquiries
+  for select to authenticated using (true);
+create policy "bridal_enquiries_admin_update" on bridal_enquiries
+  for update to authenticated using (true) with check (true);
+create policy "bridal_enquiries_admin_delete" on bridal_enquiries
+  for delete to authenticated using (true);
+
+-- =====================================================================
+-- SEED CATEGORIES (safe to run once; ON CONFLICT protects re-runs)
+-- =====================================================================
+insert into categories (name, slug, display_order) values
+  ('Hair', 'hair', 1),
+  ('Skin', 'skin', 2),
+  ('Makeup', 'makeup', 3),
+  ('Bridal', 'bridal', 4),
+  ('Nails', 'nails', 5),
+  ('Waxing', 'waxing', 6),
+  ('Spa', 'spa', 7)
+on conflict (slug) do nothing;
+
+-- =====================================================================
+-- STORAGE (for photo uploads: services, gallery, team)
+-- One public bucket called "media". Public can view; only authenticated
+-- (admin) can upload/replace/delete.
+-- =====================================================================
+insert into storage.buckets (id, name, public)
+values ('media', 'media', true)
+on conflict (id) do nothing;
+
+create policy "media_public_select" on storage.objects
+  for select using (bucket_id = 'media');
+create policy "media_admin_insert" on storage.objects
+  for insert to authenticated with check (bucket_id = 'media');
+create policy "media_admin_update" on storage.objects
+  for update to authenticated using (bucket_id = 'media');
+create policy "media_admin_delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'media');
+
+-- =====================================================================
+-- ADMIN ACCESS
+-- There is no "admin password" column anywhere in this schema on
+-- purpose. Admin login uses Supabase Auth directly:
+--   Dashboard → Authentication → Users → Add User
+--   (create ONE user with the salon owner's email + a strong password)
+-- Any signed-in Supabase Auth user is treated as an admin by the
+-- policies above. If you later have multiple staff logins and want to
+-- restrict who counts as "admin", add an `admin_users(user_id uuid)`
+-- table and change `to authenticated using (true)` above to check
+-- `exists (select 1 from admin_users where user_id = auth.uid())`.
+-- =====================================================================
