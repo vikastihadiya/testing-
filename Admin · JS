@@ -1,0 +1,720 @@
+import { supabase } from "./supabase-client.js";
+
+/* ---------------------------------------------------------------------
+   Helpers
+--------------------------------------------------------------------- */
+function esc(str){ return (str ?? "").toString().replace(/[&<>"']/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[s])); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+async function uploadImage(file, folder){
+  if(!file) return null;
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  const path = `${folder}/${Date.now()}_${cleanName}`;
+  const { error } = await supabase.storage.from("media").upload(path, file, { upsert: false });
+  if(error) throw error;
+  const { data } = supabase.storage.from("media").getPublicUrl(path);
+  return data.publicUrl;
+}
+function fileFrom(inputId){ return document.getElementById(inputId).files[0] || null; }
+
+/* ---------------------------------------------------------------------
+   Auth — single source of truth for "am I logged in"
+--------------------------------------------------------------------- */
+const loginSection = document.getElementById("loginSection");
+const adminPanel = document.getElementById("adminPanel");
+const moduleContent = document.getElementById("moduleContent");
+
+function showLogin(){
+  loginSection.style.display = "block";
+  adminPanel.style.display = "none";
+}
+function showAdmin(){
+  loginSection.style.display = "none";
+  adminPanel.style.display = "block";
+  renderTabs();
+  goToModule(currentModule);
+}
+
+document.getElementById("loginForm").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById("adEmail").value;
+  const password = document.getElementById("adPass").value;
+  const errEl = document.getElementById("loginErr");
+  errEl.style.display = "none";
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if(error){
+    errEl.textContent = error.message;
+    errEl.style.display = "block";
+    return;
+  }
+  showAdmin();
+});
+
+document.getElementById("logoutBtn").addEventListener("click", async ()=>{
+  await supabase.auth.signOut();
+  showLogin();
+});
+
+async function initAuth(){
+  const { data } = await supabase.auth.getSession();
+  if(data.session) showAdmin(); else showLogin();
+}
+supabase.auth.onAuthStateChange((_event, session)=>{
+  if(session) showAdmin(); else showLogin();
+});
+initAuth();
+
+/* ---------------------------------------------------------------------
+   Tabs — each module is fully isolated: a failure in one module shows
+   an inline error in #moduleContent, it never breaks the others.
+--------------------------------------------------------------------- */
+const MODULES = [
+  { id: "dashboard",     label: "Dashboard",         render: renderDashboard },
+  { id: "appointments",  label: "Appointments",      render: renderAppointments },
+  { id: "bridalenq",     label: "Bridal Enquiries",  render: renderBridalEnquiries },
+  { id: "categories",    label: "Categories",        render: renderCategories },
+  { id: "services",      label: "Services",          render: renderServices },
+  { id: "bridalpkg",     label: "Bridal Packages",   render: renderBridalPackages },
+  { id: "offers",        label: "Offers",            render: renderOffers },
+  { id: "gallery",       label: "Gallery",           render: renderGallery },
+  { id: "team",          label: "Team",              render: renderTeam },
+  { id: "testimonials",  label: "Testimonials",      render: renderTestimonials },
+  { id: "faqs",          label: "FAQs",              render: renderFaqs },
+  { id: "settings",      label: "Settings",          render: renderSettings }
+];
+let currentModule = "dashboard";
+
+function renderTabs(){
+  const html = MODULES.map(m => `<button data-m="${m.id}" class="${m.id===currentModule?'active':''}">${m.label}</button>`).join("");
+  document.getElementById("moduleArea").innerHTML = html;
+  document.getElementById("moduleAreaMobile").innerHTML = html;
+  document.querySelectorAll("#moduleArea button, #moduleAreaMobile button").forEach(b=>{
+    b.addEventListener("click", ()=> goToModule(b.dataset.m));
+  });
+}
+async function goToModule(id){
+  currentModule = id;
+  renderTabs();
+  moduleContent.innerHTML = `<p style="color:var(--text-soft);">Loading…</p>`;
+  const mod = MODULES.find(m=>m.id===id);
+  try{
+    await mod.render();
+  }catch(err){
+    console.error(`[${id}] module error:`, err);
+    moduleContent.innerHTML = `<div class="empty-state">This section couldn't load: ${esc(err.message || String(err))}<br><br>
+      <button class="tiny-btn" onclick="location.reload()">Reload</button></div>`;
+  }
+}
+
+/* =======================================================================
+   DASHBOARD — each count is fetched independently so one bad query
+   can't blank out the whole dashboard.
+======================================================================= */
+async function renderDashboard(){
+  moduleContent.innerHTML = `<h2 class="h-md">Dashboard</h2><div class="admin-cards" id="dashCards" style="margin-top:20px;"></div>
+    <p style="color:var(--text-soft); font-size:.86rem;">This panel talks directly to your Supabase project. Every visitor sees the same live data — no per-device storage involved.</p>`;
+  const cardsEl = document.getElementById("dashCards");
+  const today = todayISO();
+
+  const cards = [
+    { label: "Today's Appointments", query: () => supabase.from("appointments").select("id", { count: "exact", head: true }).eq("preferred_date", today) },
+    { label: "New Enquiries", query: async () => {
+        const a = await supabase.from("appointments").select("id", { count: "exact", head: true }).eq("status", "New");
+        const b = await supabase.from("bridal_enquiries").select("id", { count: "exact", head: true }).eq("status", "New");
+        if(a.error) throw a.error; if(b.error) throw b.error;
+        return { count: (a.count||0) + (b.count||0) };
+      } },
+    { label: "Active Offers", query: () => supabase.from("offers").select("id", { count: "exact", head: true }).eq("is_active", true) },
+    { label: "Total Services", query: () => supabase.from("services").select("id", { count: "exact", head: true }).eq("is_active", true) }
+  ];
+
+  cardsEl.innerHTML = cards.map(()=>`<div class="admin-stat"><div class="num">…</div><div class="lbl"></div></div>`).join("");
+  const cardEls = cardsEl.querySelectorAll(".admin-stat");
+
+  cards.forEach(async (c, i)=>{
+    cardEls[i].querySelector(".lbl").textContent = c.label;
+    try{
+      const res = await c.query();
+      if(res.error) throw res.error;
+      cardEls[i].querySelector(".num").textContent = res.count ?? 0;
+    }catch(e){
+      cardEls[i].querySelector(".num").textContent = "—";
+      cardEls[i].title = e.message;
+    }
+  });
+}
+
+/* =======================================================================
+   APPOINTMENTS
+======================================================================= */
+async function renderAppointments(){
+  const statuses = ["New","Confirmed","Completed","Cancelled","No-show"];
+  const { data, error } = await supabase.from("appointments")
+    .select("id, customer_name, phone, preferred_date, preferred_time, status, services(name)")
+    .order("created_at", { ascending: false });
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Appointments</h2>
+    <div class="admin-table-wrap" style="margin-top:16px;">
+    <table class="admin-table"><thead><tr><th>Name</th><th>Phone</th><th>Service</th><th>Date</th><th>Time</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    ${data.length ? data.map(a=>`
+      <tr>
+        <td>${esc(a.customer_name)}</td><td>${esc(a.phone)}</td><td>${esc(a.services ? a.services.name : "")}</td>
+        <td>${esc(a.preferred_date||"")}</td><td>${esc(a.preferred_time||"")}</td>
+        <td><select data-id="${a.id}" class="apt-status">${statuses.map(s=>`<option ${s===a.status?'selected':''}>${s}</option>`).join("")}</select></td>
+        <td><button class="tiny-btn danger" data-del="${a.id}">Delete</button></td>
+      </tr>`).join("") : `<tr><td colspan="7" style="text-align:center;color:var(--text-soft);">No appointment requests yet.</td></tr>`}
+    </tbody></table></div>
+  `;
+  moduleContent.querySelectorAll(".apt-status").forEach(sel=> sel.addEventListener("change", async ()=>{
+    const { error } = await supabase.from("appointments").update({ status: sel.value }).eq("id", sel.dataset.id);
+    if(error) alert("Couldn't update status: " + error.message);
+  }));
+  moduleContent.querySelectorAll("[data-del]").forEach(btn=> btn.addEventListener("click", async ()=>{
+    if(!confirm("Delete this appointment request?")) return;
+    const { error } = await supabase.from("appointments").delete().eq("id", btn.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("appointments");
+  }));
+}
+
+/* =======================================================================
+   BRIDAL ENQUIRIES
+======================================================================= */
+async function renderBridalEnquiries(){
+  const { data, error } = await supabase.from("bridal_enquiries")
+    .select("id, bride_name, phone, wedding_date, function_type, budget_range, status")
+    .order("created_at", { ascending: false });
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Bridal Enquiries</h2>
+    <div class="admin-table-wrap" style="margin-top:16px;">
+    <table class="admin-table"><thead><tr><th>Bride</th><th>Phone</th><th>Wedding Date</th><th>Function</th><th>Budget</th><th></th></tr></thead>
+    <tbody>
+    ${data.length ? data.map(a=>`
+      <tr><td>${esc(a.bride_name)}</td><td>${esc(a.phone)}</td><td>${esc(a.wedding_date||"")}</td><td>${esc(a.function_type||"")}</td><td>${esc(a.budget_range||"")}</td>
+      <td><button class="tiny-btn danger" data-del="${a.id}">Delete</button></td></tr>`).join("") :
+      `<tr><td colspan="6" style="text-align:center;color:var(--text-soft);">No bridal enquiries yet.</td></tr>`}
+    </tbody></table></div>
+  `;
+  moduleContent.querySelectorAll("[data-del]").forEach(btn=> btn.addEventListener("click", async ()=>{
+    if(!confirm("Delete this enquiry?")) return;
+    const { error } = await supabase.from("bridal_enquiries").delete().eq("id", btn.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("bridalenq");
+  }));
+}
+
+/* =======================================================================
+   CATEGORIES
+======================================================================= */
+async function renderCategories(){
+  const { data, error } = await supabase.from("categories").select("id, name, slug, display_order").order("display_order");
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Categories</h2>
+    <form class="admin-form" id="catForm">
+      <div class="row3">
+        <div class="field"><label>Name</label><input type="text" id="c_name" required></div>
+        <div class="field"><label>Slug (unique, no spaces)</label><input type="text" id="c_slug" required></div>
+        <div class="field"><label>Display order</label><input type="number" id="c_order" value="0"></div>
+      </div>
+      <div><button class="btn btn-gold btn-sm" type="submit">Add Category</button></div>
+    </form>
+    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Slug</th><th>Order</th><th></th></tr></thead>
+    <tbody>${data.map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.slug)}</td><td>${c.display_order}</td>
+      <td><button class="tiny-btn danger" data-del="${c.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+  `;
+  document.getElementById("catForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const { error } = await supabase.from("categories").insert({
+      name: document.getElementById("c_name").value,
+      slug: document.getElementById("c_slug").value,
+      display_order: parseInt(document.getElementById("c_order").value) || 0
+    });
+    if(error) return alert(error.message);
+    goToModule("categories");
+  });
+  moduleContent.querySelectorAll("[data-del]").forEach(btn=> btn.addEventListener("click", async ()=>{
+    if(!confirm("Delete this category? Services using it will keep their name but lose the category link.")) return;
+    const { error } = await supabase.from("categories").delete().eq("id", btn.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("categories");
+  }));
+}
+
+/* =======================================================================
+   SERVICES
+======================================================================= */
+async function renderServices(){
+  const [svcRes, catRes] = await Promise.all([
+    supabase.from("services").select("id, name, category_id, description, price, duration_minutes, image_url, is_popular, is_featured, is_active").order("created_at", { ascending: false }),
+    supabase.from("categories").select("id, name").order("display_order")
+  ]);
+  if(svcRes.error) throw svcRes.error;
+  if(catRes.error) throw catRes.error;
+  const services = svcRes.data, categories = catRes.data;
+  const catName = id => (categories.find(c=>c.id===id) || {}).name || "—";
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Services</h2>
+    <form class="admin-form" id="svcForm">
+      <div class="row3">
+        <div class="field"><label>Service name</label><input type="text" id="f_name" required></div>
+        <div class="field"><label>Category</label><select id="f_cat">${categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Duration (minutes)</label><input type="number" id="f_dur"></div>
+      </div>
+      <div class="field"><label>Description</label><textarea id="f_desc" rows="2"></textarea></div>
+      <div class="row3">
+        <div class="field"><label>Starting price (₹, optional)</label><input type="number" id="f_price"></div>
+        <div class="field"><label>Photo</label><input type="file" accept="image/*" id="f_img"></div>
+        <div class="field">
+          <label style="display:block;font-size:.82rem;font-weight:400;text-transform:none;"><input type="checkbox" id="f_pop"> Popular</label>
+          <label style="display:block;font-size:.82rem;font-weight:400;text-transform:none;"><input type="checkbox" id="f_feat"> Featured</label>
+          <label style="display:block;font-size:.82rem;font-weight:400;text-transform:none;"><input type="checkbox" id="f_active" checked> Active (visible on site)</label>
+        </div>
+      </div>
+      <input type="hidden" id="f_id">
+      <div><button class="btn btn-gold btn-sm" type="submit" id="svcSubmitBtn">Add Service</button> <button class="btn btn-ghost btn-sm hidden" type="button" id="svcCancelEdit">Cancel Edit</button></div>
+    </form>
+    <div class="admin-table-wrap">
+    <table class="admin-table"><thead><tr><th>Photo</th><th>Name</th><th>Category</th><th>Price</th><th>Active</th><th></th></tr></thead>
+    <tbody>${services.map(s=>`
+      <tr>
+        <td>${s.image_url?`<img class="thumb-sm" src="${esc(s.image_url)}">`:"—"}</td>
+        <td>${esc(s.name)}</td><td>${esc(catName(s.category_id))}</td><td>${s.price!=null?"₹"+s.price:"—"}</td><td>${s.is_active?"Yes":"No"}</td>
+        <td><button class="tiny-btn" data-edit="${s.id}">Edit</button><button class="tiny-btn danger" data-del="${s.id}">Delete</button></td>
+      </tr>`).join("")}</tbody></table></div>
+  `;
+
+  const form = document.getElementById("svcForm");
+  form.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const submitBtn = document.getElementById("svcSubmitBtn");
+    submitBtn.disabled = true;
+    try{
+      const id = document.getElementById("f_id").value;
+      const file = fileFrom("f_img");
+      const image_url = file ? await uploadImage(file, "services") : undefined;
+      const payload = {
+        name: document.getElementById("f_name").value,
+        category_id: document.getElementById("f_cat").value || null,
+        duration_minutes: document.getElementById("f_dur").value ? parseInt(document.getElementById("f_dur").value) : null,
+        description: document.getElementById("f_desc").value,
+        price: document.getElementById("f_price").value ? parseFloat(document.getElementById("f_price").value) : null,
+        is_popular: document.getElementById("f_pop").checked,
+        is_featured: document.getElementById("f_feat").checked,
+        is_active: document.getElementById("f_active").checked
+      };
+      if(image_url) payload.image_url = image_url;
+
+      const { error } = id
+        ? await supabase.from("services").update(payload).eq("id", id)
+        : await supabase.from("services").insert(payload);
+      if(error) throw error;
+      goToModule("services");
+    }catch(err){
+      alert("Couldn't save service: " + err.message);
+      submitBtn.disabled = false;
+    }
+  });
+
+  moduleContent.querySelectorAll("[data-edit]").forEach(b=> b.addEventListener("click", ()=>{
+    const s = services.find(x=>x.id===b.dataset.edit);
+    document.getElementById("f_id").value = s.id;
+    document.getElementById("f_name").value = s.name;
+    document.getElementById("f_cat").value = s.category_id || "";
+    document.getElementById("f_dur").value = s.duration_minutes || "";
+    document.getElementById("f_desc").value = s.description || "";
+    document.getElementById("f_price").value = s.price ?? "";
+    document.getElementById("f_pop").checked = !!s.is_popular;
+    document.getElementById("f_feat").checked = !!s.is_featured;
+    document.getElementById("f_active").checked = !!s.is_active;
+    document.getElementById("svcSubmitBtn").textContent = "Save Changes";
+    document.getElementById("svcCancelEdit").classList.remove("hidden");
+    moduleContent.scrollIntoView({ behavior: "smooth" });
+  }));
+  document.getElementById("svcCancelEdit").addEventListener("click", ()=> goToModule("services"));
+  moduleContent.querySelectorAll("[data-del]").forEach(b=> b.addEventListener("click", async ()=>{
+    if(!confirm("Delete this service?")) return;
+    const { error } = await supabase.from("services").delete().eq("id", b.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("services");
+  }));
+}
+
+/* =======================================================================
+   BRIDAL PACKAGES
+======================================================================= */
+async function renderBridalPackages(){
+  const { data, error } = await supabase.from("bridal_packages").select("id, name, price, includes, is_active").order("created_at", { ascending: false });
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Bridal Packages</h2>
+    <form class="admin-form" id="pkgForm">
+      <div class="row2">
+        <div class="field"><label>Package name</label><input type="text" id="p_name" required></div>
+        <div class="field"><label>Price (₹, optional)</label><input type="number" id="p_price"></div>
+      </div>
+      <div class="field"><label>Includes (one per line)</label><textarea id="p_includes" rows="3" placeholder="Makeup&#10;Hair styling&#10;Draping&#10;Touch-up&#10;Consultation"></textarea></div>
+      <label style="font-size:.82rem;"><input type="checkbox" id="p_active" checked> Active</label>
+      <div><button class="btn btn-gold btn-sm" type="submit">Add Package</button></div>
+    </form>
+    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Price</th><th>Includes</th><th>Active</th><th></th></tr></thead>
+    <tbody>${data.map(p=>`<tr><td>${esc(p.name)}</td><td>${p.price!=null?"₹"+p.price:"—"}</td><td>${esc((p.includes||[]).join(", "))}</td><td>${p.is_active?"Yes":"No"}</td>
+      <td><button class="tiny-btn danger" data-del="${p.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+  `;
+  document.getElementById("pkgForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const includes = document.getElementById("p_includes").value.split("\n").map(s=>s.trim()).filter(Boolean);
+    const { error } = await supabase.from("bridal_packages").insert({
+      name: document.getElementById("p_name").value,
+      price: document.getElementById("p_price").value ? parseFloat(document.getElementById("p_price").value) : null,
+      includes,
+      is_active: document.getElementById("p_active").checked
+    });
+    if(error) return alert(error.message);
+    goToModule("bridalpkg");
+  });
+  moduleContent.querySelectorAll("[data-del]").forEach(b=> b.addEventListener("click", async ()=>{
+    if(!confirm("Delete this package?")) return;
+    const { error } = await supabase.from("bridal_packages").delete().eq("id", b.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("bridalpkg");
+  }));
+}
+
+/* =======================================================================
+   OFFERS
+======================================================================= */
+async function renderOffers(){
+  const { data, error } = await supabase.from("offers").select("id, name, description, original_price, offer_price, valid_until, is_active").order("created_at", { ascending: false });
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Offers</h2>
+    <form class="admin-form" id="offForm">
+      <div class="field"><label>Offer name</label><input type="text" id="o_name" required></div>
+      <div class="field"><label>Description</label><textarea id="o_desc" rows="2"></textarea></div>
+      <div class="row3">
+        <div class="field"><label>Original price (₹)</label><input type="number" id="o_orig"></div>
+        <div class="field"><label>Offer price (₹)</label><input type="number" id="o_disc"></div>
+        <div class="field"><label>Valid until</label><input type="date" id="o_end"></div>
+      </div>
+      <label style="font-size:.82rem;"><input type="checkbox" id="o_active" checked> Active</label>
+      <div><button class="btn btn-gold btn-sm" type="submit">Add Offer</button></div>
+    </form>
+    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Price</th><th>Valid Until</th><th>Active</th><th></th></tr></thead>
+    <tbody>${data.map(o=>`<tr><td>${esc(o.name)}</td><td>${o.offer_price!=null?"₹"+o.offer_price:"—"}</td><td>${esc(o.valid_until||"—")}</td><td>${o.is_active?"Yes":"No"}</td>
+      <td><button class="tiny-btn danger" data-del="${o.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+  `;
+  document.getElementById("offForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const { error } = await supabase.from("offers").insert({
+      name: document.getElementById("o_name").value,
+      description: document.getElementById("o_desc").value,
+      original_price: document.getElementById("o_orig").value ? parseFloat(document.getElementById("o_orig").value) : null,
+      offer_price: document.getElementById("o_disc").value ? parseFloat(document.getElementById("o_disc").value) : null,
+      valid_until: document.getElementById("o_end").value || null,
+      is_active: document.getElementById("o_active").checked
+    });
+    if(error) return alert(error.message);
+    goToModule("offers");
+  });
+  moduleContent.querySelectorAll("[data-del]").forEach(b=> b.addEventListener("click", async ()=>{
+    if(!confirm("Delete this offer?")) return;
+    const { error } = await supabase.from("offers").delete().eq("id", b.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("offers");
+  }));
+}
+
+/* =======================================================================
+   GALLERY  (single table, gallery_type distinguishes portfolio / before_after / bridal / customer)
+======================================================================= */
+async function renderGallery(){
+  const { data, error } = await supabase.from("gallery").select("id, gallery_type, category, title, image_url, before_image_url, is_featured, display_order").order("display_order");
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Gallery</h2>
+    <form class="admin-form" id="galForm">
+      <div class="row3">
+        <div class="field"><label>Type</label><select id="g_type">
+          <option value="portfolio">Portfolio</option>
+          <option value="before_after">Before / After</option>
+          <option value="bridal">Bridal</option>
+          <option value="customer">Customer</option>
+        </select></div>
+        <div class="field"><label>Category</label><select id="g_cat">${["Bridal","Hair","Makeup","Hair Colour","Skin","Nails","Party Makeup"].map(x=>`<option>${x}</option>`).join("")}</select></div>
+        <div class="field"><label>Title (optional)</label><input type="text" id="g_title"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label id="g_img_label">Image</label><input type="file" accept="image/*" id="g_img" required></div>
+        <div class="field hidden" id="g_before_wrap"><label>"Before" image (only for Before/After)</label><input type="file" accept="image/*" id="g_before_img"></div>
+      </div>
+      <div><button class="btn btn-gold btn-sm" type="submit">Upload</button></div>
+    </form>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:10px;">
+      ${data.map(g=>`<div style="position:relative;"><img src="${esc(g.image_url)}" style="width:100%; aspect-ratio:1; object-fit:cover; border-radius:4px;"><button class="tiny-btn danger" data-del="${g.id}" style="position:absolute; top:4px; right:4px;">✕</button></div>`).join("") || `<p style="color:var(--text-soft);">No images uploaded yet.</p>`}
+    </div>
+  `;
+  const typeSel = document.getElementById("g_type");
+  const beforeWrap = document.getElementById("g_before_wrap");
+  const imgLabel = document.getElementById("g_img_label");
+  typeSel.addEventListener("change", ()=>{
+    const isBA = typeSel.value === "before_after";
+    beforeWrap.classList.toggle("hidden", !isBA);
+    imgLabel.textContent = isBA ? '"After" image' : "Image";
+  });
+
+  document.getElementById("galForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    try{
+      const image_url = await uploadImage(fileFrom("g_img"), "gallery");
+      const isBA = typeSel.value === "before_after";
+      const before_image_url = isBA ? await uploadImage(fileFrom("g_before_img"), "gallery") : null;
+      const { error } = await supabase.from("gallery").insert({
+        gallery_type: typeSel.value,
+        category: document.getElementById("g_cat").value,
+        title: document.getElementById("g_title").value,
+        image_url, before_image_url
+      });
+      if(error) throw error;
+      goToModule("gallery");
+    }catch(err){ alert("Upload failed: " + err.message); }
+  });
+  moduleContent.querySelectorAll("[data-del]").forEach(b=> b.addEventListener("click", async ()=>{
+    if(!confirm("Delete this image?")) return;
+    const { error } = await supabase.from("gallery").delete().eq("id", b.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("gallery");
+  }));
+}
+
+/* =======================================================================
+   TEAM
+======================================================================= */
+async function renderTeam(){
+  const { data, error } = await supabase.from("team_members").select("id, name, role, specialty, experience, photo_url, is_active").order("display_order");
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Team</h2>
+    <form class="admin-form" id="teamForm">
+      <div class="row3">
+        <div class="field"><label>Name</label><input type="text" id="t_name" required></div>
+        <div class="field"><label>Role</label><input type="text" id="t_role" placeholder="e.g. Senior Makeup Artist"></div>
+        <div class="field"><label>Experience</label><input type="text" id="t_exp" placeholder="e.g. 8 years"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Specialty</label><input type="text" id="t_spec"></div>
+        <div class="field"><label>Photo</label><input type="file" accept="image/*" id="t_img"></div>
+      </div>
+      <div><button class="btn btn-gold btn-sm" type="submit">Add Team Member</button></div>
+    </form>
+    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Photo</th><th>Name</th><th>Role</th><th></th></tr></thead>
+    <tbody>${data.map(t=>`<tr><td>${t.photo_url?`<img class="thumb-sm" src="${esc(t.photo_url)}">`:"—"}</td><td>${esc(t.name)}</td><td>${esc(t.role||"")}</td>
+      <td><button class="tiny-btn danger" data-del="${t.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+  `;
+  document.getElementById("teamForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    try{
+      const photo_url = await uploadImage(fileFrom("t_img"), "team");
+      const { error } = await supabase.from("team_members").insert({
+        name: document.getElementById("t_name").value,
+        role: document.getElementById("t_role").value,
+        experience: document.getElementById("t_exp").value,
+        specialty: document.getElementById("t_spec").value,
+        photo_url
+      });
+      if(error) throw error;
+      goToModule("team");
+    }catch(err){ alert("Couldn't save: " + err.message); }
+  });
+  moduleContent.querySelectorAll("[data-del]").forEach(b=> b.addEventListener("click", async ()=>{
+    if(!confirm("Remove this team member?")) return;
+    const { error } = await supabase.from("team_members").delete().eq("id", b.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("team");
+  }));
+}
+
+/* =======================================================================
+   TESTIMONIALS
+======================================================================= */
+async function renderTestimonials(){
+  const { data, error } = await supabase.from("testimonials").select("id, customer_name, testimonial, service_name, rating, is_approved").order("created_at", { ascending: false });
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Testimonials</h2>
+    <form class="admin-form" id="revForm">
+      <div class="row3">
+        <div class="field"><label>Customer name</label><input type="text" id="r_name" required></div>
+        <div class="field"><label>Service</label><input type="text" id="r_svc"></div>
+        <div class="field"><label>Rating (1–5)</label><input type="number" min="1" max="5" id="r_rating" value="5"></div>
+      </div>
+      <div class="field"><label>Review</label><textarea id="r_review" rows="2" required></textarea></div>
+      <label style="font-size:.82rem;"><input type="checkbox" id="r_approved" checked> Approved (visible on site)</label>
+      <div><button class="btn btn-gold btn-sm" type="submit">Add Review</button></div>
+    </form>
+    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Review</th><th>Rating</th><th>Approved</th><th></th></tr></thead>
+    <tbody>${data.map(r=>`<tr><td>${esc(r.customer_name)}</td><td>${esc(r.testimonial)}</td><td>${"★".repeat(r.rating||5)}</td><td>${r.is_approved?"Yes":"No"}</td>
+      <td><button class="tiny-btn danger" data-del="${r.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+  `;
+  document.getElementById("revForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const { error } = await supabase.from("testimonials").insert({
+      customer_name: document.getElementById("r_name").value,
+      service_name: document.getElementById("r_svc").value,
+      rating: parseInt(document.getElementById("r_rating").value) || 5,
+      testimonial: document.getElementById("r_review").value,
+      is_approved: document.getElementById("r_approved").checked
+    });
+    if(error) return alert(error.message);
+    goToModule("testimonials");
+  });
+  moduleContent.querySelectorAll("[data-del]").forEach(b=> b.addEventListener("click", async ()=>{
+    if(!confirm("Delete this review?")) return;
+    const { error } = await supabase.from("testimonials").delete().eq("id", b.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("testimonials");
+  }));
+}
+
+/* =======================================================================
+   FAQS
+======================================================================= */
+async function renderFaqs(){
+  const { data, error } = await supabase.from("faqs").select("id, question, answer, display_order").order("display_order");
+  if(error) throw error;
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">FAQs</h2>
+    <form class="admin-form" id="faqForm">
+      <div class="field"><label>Question</label><input type="text" id="q_q" required></div>
+      <div class="field"><label>Answer</label><textarea id="q_a" rows="2" required></textarea></div>
+      <div><button class="btn btn-gold btn-sm" type="submit">Add FAQ</button></div>
+    </form>
+    <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Question</th><th>Answer</th><th></th></tr></thead>
+    <tbody>${data.map(f=>`<tr><td>${esc(f.question)}</td><td>${esc(f.answer)}</td><td><button class="tiny-btn danger" data-del="${f.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+  `;
+  document.getElementById("faqForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const { error } = await supabase.from("faqs").insert({
+      question: document.getElementById("q_q").value,
+      answer: document.getElementById("q_a").value
+    });
+    if(error) return alert(error.message);
+    goToModule("faqs");
+  });
+  moduleContent.querySelectorAll("[data-del]").forEach(b=> b.addEventListener("click", async ()=>{
+    if(!confirm("Delete this FAQ?")) return;
+    const { error } = await supabase.from("faqs").delete().eq("id", b.dataset.del);
+    if(error) return alert(error.message);
+    goToModule("faqs");
+  }));
+}
+
+/* =======================================================================
+   SETTINGS  (key/value table — exact columns: setting_key, setting_value)
+======================================================================= */
+async function renderSettings(){
+  const { data, error } = await supabase.from("settings").select("setting_key, setting_value");
+  if(error) throw error;
+  const s = {};
+  data.forEach(row => s[row.setting_key] = row.setting_value);
+  let hours = [];
+  try{ hours = JSON.parse(s.opening_hours || "[]"); }catch(e){ hours = []; }
+
+  moduleContent.innerHTML = `
+    <h2 class="h-md">Website Settings</h2>
+    <form class="admin-form" id="setForm">
+      <div class="row2">
+        <div class="field"><label>Salon phone</label><input type="tel" id="st_phone" value="${esc(s.phone)}"></div>
+        <div class="field"><label>WhatsApp number (country code + digits only)</label><input type="text" id="st_wa" value="${esc(s.whatsapp)}" placeholder="e.g. 919876543210"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Email</label><input type="email" id="st_email" value="${esc(s.email)}"></div>
+        <div class="field"><label>Instagram URL</label><input type="url" id="st_insta" value="${esc(s.instagram_url)}"></div>
+      </div>
+      <div class="field"><label>Address</label><input type="text" id="st_addr" value="${esc(s.address)}"></div>
+      <div class="row2">
+        <div class="field"><label>Google Maps link</label><input type="url" id="st_maps" value="${esc(s.maps_url)}"></div>
+        <div class="field"><label>Google Review link</label><input type="url" id="st_greview" value="${esc(s.google_review_url)}"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Verified Google rating (optional)</label><input type="text" id="st_rating" value="${esc(s.rating)}" placeholder="e.g. 4.8"></div>
+        <div class="field"><label>Verified review count (optional)</label><input type="text" id="st_reviewcount" value="${esc(s.review_count)}" placeholder="e.g. 320+"></div>
+      </div>
+      <div><button class="btn btn-gold btn-sm" type="submit">Save Settings</button></div>
+    </form>
+
+    <h3 class="h-md" style="margin-top:30px;">Opening Hours</h3>
+    <form class="admin-form" id="hrsForm">
+      <div class="row2">
+        <div class="field"><label>Days</label><input type="text" id="h_days" placeholder="e.g. Monday – Saturday"></div>
+        <div class="field"><label>Time</label><input type="text" id="h_time" placeholder="e.g. 10:00 AM – 8:00 PM"></div>
+      </div>
+      <div><button class="btn btn-ghost btn-sm" type="submit">Add Row</button></div>
+    </form>
+    <div class="admin-table-wrap"><table class="admin-table"><tbody>${hours.map((h,i)=>`<tr><td>${esc(h.day)}</td><td>${esc(h.time)}</td><td><button class="tiny-btn danger" data-hdel="${i}">Delete</button></td></tr>`).join("")}</tbody></table></div>
+
+    <h3 class="h-md" style="margin-top:30px;">Change Your Admin Password</h3>
+    <form class="admin-form" id="passForm">
+      <div class="field"><label>New password</label><input type="password" id="new_pass" minlength="6" required></div>
+      <div><button class="btn btn-ghost btn-sm" type="submit">Update Password</button></div>
+    </form>
+  `;
+
+  document.getElementById("setForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const updates = {
+      phone: document.getElementById("st_phone").value,
+      whatsapp: document.getElementById("st_wa").value,
+      email: document.getElementById("st_email").value,
+      instagram_url: document.getElementById("st_insta").value,
+      address: document.getElementById("st_addr").value,
+      maps_url: document.getElementById("st_maps").value,
+      google_review_url: document.getElementById("st_greview").value,
+      rating: document.getElementById("st_rating").value,
+      review_count: document.getElementById("st_reviewcount").value
+    };
+    try{
+      await Promise.all(Object.entries(updates).map(([key, value]) =>
+        supabase.from("settings").update({ setting_value: value }).eq("setting_key", key).then(r=>{ if(r.error) throw r.error; })
+      ));
+      alert("Settings saved.");
+    }catch(err){ alert("Couldn't save settings: " + err.message); }
+  });
+
+  document.getElementById("hrsForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const day = document.getElementById("h_days").value, time = document.getElementById("h_time").value;
+    if(!day || !time) return;
+    hours.push({ day, time });
+    const { error } = await supabase.from("settings").update({ setting_value: JSON.stringify(hours) }).eq("setting_key", "opening_hours");
+    if(error) return alert(error.message);
+    goToModule("settings");
+  });
+  moduleContent.querySelectorAll("[data-hdel]").forEach(b=> b.addEventListener("click", async ()=>{
+    hours.splice(parseInt(b.dataset.hdel), 1);
+    const { error } = await supabase.from("settings").update({ setting_value: JSON.stringify(hours) }).eq("setting_key", "opening_hours");
+    if(error) return alert(error.message);
+    goToModule("settings");
+  }));
+
+  document.getElementById("passForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    const { error } = await supabase.auth.updateUser({ password: document.getElementById("new_pass").value });
+    if(error) return alert(error.message);
+    alert("Password updated. Use it next time you log in.");
+    e.target.reset();
+  });
+}
