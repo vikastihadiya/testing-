@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manju's The World of Glamour — Premium Beauty Salon, Rohini, Delhi</title>
+<meta name="description" content="Manju's The World of Glamour — a premium women's beauty parlour, salon and bridal makeup studio in Sector 3, Rohini, Delhi. Book your appointment today.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="loader"><div class="brand"><div class="l1">MANJU'S</div><div class="l2" style="letter-spacing:.22em;color:var(--gold-soft);">THE WORLD OF GLAMOUR</div></div><div class="bar"></div></div>
+
+<!-- ================= PUBLIC SITE ================= -->
+<div id="publicSite">
+
+<header id="topnav">
+  <div class="container nav-row">
+    <a href="#home" class="brand" style="text-decoration:none;">
+      <span class="l1">MANJU'S</span>
+      <span class="l2">The World of Glamour</span>
+    </a>
+    <nav class="main-links">
+      <a href="#about">About</a>
+      <a href="#services">Services</a>
+      <a href="#bridal">Bridal</a>
+      <a href="#work">Our Work</a>
+      <a href="#team">Team</a>
+      <a href="#offers">Offers</a>
+      <a href="#reviews">Reviews</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <div class="nav-actions">
+      <a href="#book" class="btn btn-gold btn-sm" style="display:none" id="navBookBtn">Book Appointment</a>
+      <button class="hamburger" id="hamburgerBtn" aria-label="Open menu">☰</button>
+    </div>
+  </div>
+</header>
+
+<div class="mobile-menu" id="mobileMenu">
+  <div class="mobile-menu-top"><button class="hamburger" id="closeMenuBtn" aria-label="Close menu">✕</button></div>
+  <a href="#home" class="mnav">Home</a>
+  <a href="#about" class="mnav">About</a>
+  <a href="#services" class="mnav">Services</a>
+  <a href="#bridal" class="mnav">Bridal</a>
+  <a href="#work" class="mnav">Our Work</a>
+  <a href="#team" class="mnav">Team</a>
+  <a href="#offers" class="mnav">Offers</a>
+  <a href="#reviews" class="mnav">Reviews</a>
+  <a href="#contact" class="mnav">Contact</a>
+  <a href="#book" class="btn btn-gold btn-block" style="margin-top:24px;">Book Appointment</a>
+</div>
+
+<main>
+
+<!-- HERO -->
+<section class="hero" id="home">
+  <div class="container hero-inner">
+    <div class="eyebrow">Sector 3, Rohini, Delhi</div>
+    <h1>Beauty, elevated.</h1>
+    <p class="tagline">Where expert artistry meets personalised beauty.</p>
+    <p class="support">Discover premium hair, skin, makeup and bridal experiences at Manju's The World of Glamour — designed around you, from consultation to finishing touch.</p>
+    <div class="hero-ctas">
+      <a href="#book" class="btn btn-gold">Book Appointment</a>
+      <a href="#services" class="btn btn-ghost">Explore Services</a>
+    </div>
+    <div class="trust-strip" id="trustStrip"></div>
+  </div>
+</section>
+
+<!-- BOOKING WIDGET -->
+<div class="container booking-wrap" id="book">
+  <div class="booking-card">
+    <h2>Your Beauty Appointment, Made Easy</h2>
+    <form id="bookingForm">
+      <div class="form-grid cols-5">
+        <div class="field">
+          <label for="bkService">Select service</label>
+          <select id="bkService" required><option value="">Choose a service</option></select>
+        </div>
+        <div class="field"><label for="bkDate">Preferred date</label><input type="date" id="bkDate" required></div>
+        <div class="field"><label for="bkTime">Preferred time</label><input type="time" id="bkTime" required></div>
+        <div class="field"><label for="bkName">Your name</label><input type="text" id="bkName" placeholder="Full name" required></div>
+        <div class="field"><label for="bkPhone">Phone number</label><input type="tel" id="bkPhone" placeholder="10-digit mobile" required></div>
+      </div>
+      <div style="margin-top:18px; display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
+        <button type="submit" class="btn btn-gold">Request Appointment</button>
+        <label style="font-size:.78rem; color:var(--text-soft); display:flex; gap:6px; align-items:flex-start;">
+          <input type="checkbox" required style="margin-top:3px;"> I agree to be contacted regarding this appointment enquiry.
+        </label>
+      </div>
+      <p class="form-note">This is an <strong>appointment request</strong>, not a confirmed slot — our team will confirm your booking shortly by phone or WhatsApp.</p>
+      <div class="confirm-box" id="bkConfirm">
+        <strong>Thank you! Your appointment request has been received.</strong>
+        <p style="margin-top:6px; font-size:.86rem; color:var(--text-soft);">We'll confirm shortly. You can also continue on WhatsApp for a faster response.</p>
+        <a href="#" id="bkWaLink" class="btn btn-wa btn-sm" style="margin-top:10px;">Continue on WhatsApp</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- STATS -->
+<section class="section" style="padding-top:56px;">
+  <div class="container">
+    <div class="stats-row" id="statsRow"></div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section class="section section-alt" id="about">
+  <div class="container about-grid">
+    <div class="art-panel"><span class="monogram">M</span><div class="placeholder-tag">Salon interior photograph — add via admin panel</div></div>
+    <div>
+      <div class="eyebrow">Our Story</div>
+      <h2 class="h-lg" style="margin-top:10px;">More than a beauty parlour.</h2>
+      <p class="lede" style="margin-top:16px;">Manju's The World of Glamour is a women's beauty studio in Rohini built around one idea: that every client deserves an experience as considered as the results. From everyday grooming to bridal transformations, our team brings together technical skill, premium products and genuine care for each face and story that walks through our door.</p>
+      <ul class="about-list">
+        <li>Experienced beauty professionals across hair, skin, makeup and bridal artistry</li>
+        <li>Personalised consultations before every service</li>
+        <li>A clean, hygienic and welcoming studio environment</li>
+        <li>Premium products chosen for real results</li>
+        <li>Dedicated bridal and occasion-wear expertise</li>
+      </ul>
+      <a href="#work" class="link-underline" style="display:inline-block; margin-top:20px;">Discover our story →</a>
+    </div>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section class="section" id="services">
+  <div class="container">
+    <div class="eyebrow">Menu</div>
+    <h2 class="h-lg" style="margin-top:10px;">Signature Beauty Services</h2>
+    <p class="lede" style="margin-top:10px;">Browse our services by category, or search for exactly what you're after.</p>
+    <div class="search-sort" style="margin-top:24px;">
+      <input type="text" id="svcSearch" placeholder="🔎 Search services...">
+      <select id="svcSort">
+        <option value="popular">Sort: Popular</option>
+        <option value="low">Price: Low to High</option>
+        <option value="high">Price: High to Low</option>
+      </select>
+    </div>
+    <div class="filter-row" id="svcFilters"></div>
+    <div class="svc-grid" id="svcGrid"></div>
+  </div>
+</section>
+
+<!-- BRIDAL -->
+<section class="section section-alt" id="bridal">
+  <div class="container">
+    <div class="bridal-hero">
+      <div class="eyebrow" style="color:var(--gold-soft);">Bridal Studio</div>
+      <h2 style="margin-top:10px;">Your wedding.<br>Your signature look.</h2>
+      <p style="max-width:52ch; margin:16px auto 0; color:#D8CBB2;">Bridal, engagement, reception and party makeup, hair styling and draping — crafted for every function of your celebration.</p>
+      <a href="#bridalEnquiry" class="btn btn-gold" style="margin-top:26px;">Enquire for Bridal Booking</a>
+    </div>
+    <div class="pkg-grid" id="bridalPkgGrid"></div>
+  </div>
+</section>
+
+<div class="section" id="bridalEnquiry">
+  <div class="container" style="max-width:720px;">
+    <h3 class="h-md">Send a Bridal Enquiry</h3>
+    <p class="lede" style="margin-top:6px;">Tell us about your big day and we'll get back to you with a personalised bridal plan.</p>
+    <form id="bridalForm" class="form-grid" style="margin-top:20px;">
+      <div class="field"><label>Bride name</label><input type="text" id="brName" required></div>
+      <div class="field"><label>Phone number</label><input type="tel" id="brPhone" required></div>
+      <div class="field"><label>Wedding date</label><input type="date" id="brDate" required></div>
+      <div class="field"><label>Function</label>
+        <select id="brFunction"><option>Wedding Day</option><option>Engagement</option><option>Reception</option><option>Sangeet / Party</option><option>Other</option></select>
+      </div>
+      <div class="field"><label>Wedding venue</label><input type="text" id="brVenue"></div>
+      <div class="field"><label>Number of functions</label><input type="number" min="1" id="brFnCount"></div>
+      <div class="field"><label>Preferred makeup style</label>
+        <select id="brStyle"><option>No preference</option><option>HD / Airbrush</option><option>Traditional</option><option>Contemporary</option></select>
+      </div>
+      <div class="field"><label>Budget range</label>
+        <select id="brBudget"><option>Prefer to discuss</option><option>Under ₹15,000</option><option>₹15,000 – ₹30,000</option><option>₹30,000 – ₹50,000</option><option>Above ₹50,000</option></select>
+      </div>
+      <div class="field" style="grid-column:1/-1;"><label>Additional requirements</label><textarea id="brNotes" rows="3"></textarea></div>
+      <div style="grid-column:1/-1;">
+        <button type="submit" class="btn btn-gold">Send Bridal Enquiry</button>
+      </div>
+      <div class="confirm-box" id="brConfirm" style="grid-column:1/-1;">
+        <strong>Thank you! Your bridal enquiry has been sent.</strong>
+        <p style="margin-top:6px; font-size:.86rem; color:var(--text-soft);">Our bridal team will reach out shortly.</p>
+        <a href="#" id="brWaLink" class="btn btn-wa btn-sm" style="margin-top:10px;">Continue on WhatsApp</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- GALLERY / OUR WORK -->
+<section class="section" id="work">
+  <div class="container">
+    <div class="eyebrow">Portfolio</div>
+    <h2 class="h-lg" style="margin-top:10px;">Our Work</h2>
+    <p class="lede" style="margin-top:10px;">Real transformations from our studio — bridal, hair, makeup and more.</p>
+    <div class="filter-row" id="galFilters"></div>
+    <div class="gal-grid" id="galGrid"></div>
+    <div id="galEmpty" class="empty-state hidden" style="margin-top:22px;">Our gallery is being curated. Real client transformations will appear here soon — check back shortly.</div>
+  </div>
+</section>
+
+<!-- VIDEO / REELS -->
+<section class="section section-alt" id="reels">
+  <div class="container">
+    <div class="eyebrow">In Motion</div>
+    <h2 class="h-lg" style="margin-top:10px;">Behind the Glamour</h2>
+    <div id="reelsWrap" class="empty-state" style="margin-top:22px;">Video transformations and behind-the-scenes reels will be added here soon. Follow us on Instagram in the meantime.</div>
+  </div>
+</section>
+
+<!-- TEAM -->
+<section class="section" id="team">
+  <div class="container">
+    <div class="eyebrow">The Studio</div>
+    <h2 class="h-lg" style="margin-top:10px;">Meet Our Beauty Experts</h2>
+    <div class="team-grid" id="teamGrid"></div>
+    <div id="teamEmpty" class="empty-state hidden" style="margin-top:22px;">Team profiles are being added — check back soon to meet our artists.</div>
+  </div>
+</section>
+
+<!-- WHY CHOOSE US -->
+<section class="section section-alt">
+  <div class="container">
+    <div class="eyebrow">Why Manju's</div>
+    <h2 class="h-lg" style="margin-top:10px;">Why Choose Us</h2>
+    <div class="why-grid">
+      <div class="why-item"><div class="mark">✓</div><h4>Personalised consultations</h4><p>Every service begins with understanding your face, skin and goals.</p></div>
+      <div class="why-item"><div class="mark">✓</div><h4>Experienced professionals</h4><p>A trained team across hair, skin, makeup and bridal artistry.</p></div>
+      <div class="why-item"><div class="mark">✓</div><h4>Premium products</h4><p>We use quality products chosen for comfort and results.</p></div>
+      <div class="why-item"><div class="mark">✓</div><h4>Hygienic environment</h4><p>A clean, well-maintained studio for your peace of mind.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- OFFERS -->
+<section class="section" id="offers">
+  <div class="container">
+    <div class="eyebrow">Limited Time</div>
+    <h2 class="h-lg" style="margin-top:10px;">Current Beauty Offers</h2>
+    <div class="offer-grid" id="offerGrid"></div>
+    <div id="offerEmpty" class="empty-state hidden" style="margin-top:22px;">No active offers right now — check back soon, or ask us about current promotions.</div>
+  </div>
+</section>
+
+<!-- REVIEWS -->
+<section class="section section-alt" id="reviews">
+  <div class="container">
+    <div class="eyebrow">Testimonials</div>
+    <h2 class="h-lg" style="margin-top:10px;">Beauty Experiences, Shared</h2>
+    <div class="rev-grid" id="revGrid"></div>
+    <div id="revEmpty" class="empty-state hidden" style="margin-top:22px;">Reviews will appear here as our clients share their experience.</div>
+    <div style="margin-top:24px;"><a href="#" id="googleReviewLink" target="_blank" class="link-underline">Write a Google Review →</a></div>
+  </div>
+</section>
+
+<!-- INSTAGRAM -->
+<section class="section">
+  <div class="container" style="text-align:center;">
+    <div class="eyebrow">@manjusworldofglamour</div>
+    <h2 class="h-lg" style="margin-top:10px;">Follow Our Glamour Journey</h2>
+    <p class="lede" style="margin:14px auto 0;">Daily inspiration, transformations and studio moments on Instagram.</p>
+    <a href="#" id="instaFollowLink" target="_blank" class="btn btn-gold" style="margin-top:22px;">Follow on Instagram</a>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section section-alt">
+  <div class="container" style="max-width:820px;">
+    <div class="eyebrow">Good to Know</div>
+    <h2 class="h-lg" style="margin-top:10px;">Frequently Asked Questions</h2>
+    <div id="faqList" style="margin-top:20px;"></div>
+  </div>
+</section>
+
+<!-- LOCATION / CONTACT -->
+<section class="section" id="contact">
+  <div class="container contact-grid">
+    <div>
+      <div class="eyebrow">Visit Us</div>
+      <h2 class="h-lg" style="margin-top:10px;">Let's make you feel beautiful.</h2>
+      <p class="lede" style="margin-top:10px;" id="addressText"></p>
+      <table class="hours-table" id="hoursTable"></table>
+      <div class="contact-links" id="contactLinks"></div>
+    </div>
+    <div>
+      <div class="map-frame" id="mapFrame"></div>
+      <a href="#" id="directionsLink" target="_blank" class="btn btn-ghost btn-block" style="margin-top:14px;">Get Directions</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="container foot-grid">
+    <div>
+      <div class="brand" style="color:#F6EFE1;"><span class="l1">MANJU'S</span><span class="l2">The World of Glamour</span></div>
+      <p style="margin-top:14px; font-size:.85rem; max-width:36ch; color:#B7A98A;">A premium women's beauty parlour, salon and bridal studio in Sector 3, Rohini, Delhi.</p>
+    </div>
+    <div>
+      <h5>Quick Links</h5>
+      <a href="#services">Services</a><a href="#bridal">Bridal</a><a href="#work">Gallery</a><a href="#book">Book Appointment</a><a href="#contact">Contact</a>
+    </div>
+    <div>
+      <h5>Connect</h5>
+      <a href="#" id="footInsta">Instagram</a><a href="#" id="footWa">WhatsApp</a><a href="#" id="footMaps">Google Maps</a>
+    </div>
+    <div>
+      <h5>Legal</h5>
+      <a href="#">Privacy Policy</a><a href="#">Terms of Service</a>
+    </div>
+  </div>
+  <div class="container foot-bottom">
+    <span>© <span id="yearNow"></span> Manju's The World of Glamour. All rights reserved.</span>
+    <a href="admin.html" style="color:#8A7A5C;">Studio Admin</a>
+  </div>
+</footer>
+
+<!-- Mobile sticky bar -->
+<div class="mobile-bar">
+  <a href="tel:" id="mbCall">📞<span>Call</span></a>
+  <a href="#" id="mbWa" class="mid" target="_blank">💬<span>WhatsApp</span></a>
+  <a href="#book" class="book-cta">📅<span>Book Now</span></a>
+</div>
+<a href="#" id="waFloat" class="wa-float" target="_blank" aria-label="WhatsApp us">💬</a>
+
+</div><!-- /publicSite -->
+
+<!-- Service detail modal -->
+<div class="overlay" id="svcOverlay">
+  <div class="modal">
+    <button class="modal-close" id="svcModalClose">✕</button>
+    <div id="svcModalBody"></div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightboxClose">✕</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
