@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Studio Admin — Manju's The World of Glamour</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div class="login-wrap" id="loginSection">
+  <div class="eyebrow" style="text-align:center;">Studio Admin</div>
+  <h2 class="h-md" style="text-align:center; margin-top:8px;">Sign in</h2>
+  <form id="loginForm" style="margin-top:22px; display:grid; gap:12px;">
+    <div class="field"><label>Email</label><input type="email" id="adEmail" required></div>
+    <div class="field"><label>Password</label><input type="password" id="adPass" required></div>
+    <button class="btn btn-gold btn-block" type="submit">Sign In</button>
+    <p id="loginErr" style="color:#B5493A; font-size:.82rem; text-align:center; display:none;"></p>
+    <p style="font-size:.78rem; color:var(--text-soft); text-align:center;">
+      No account yet? Create one Supabase user under<br>
+      <strong>Dashboard → Authentication → Users → Add User</strong> —<br>
+      that email + password logs in here.
+    </p>
+    <a href="index.html" class="link-underline" style="text-align:center; margin-top:6px;">← Back to website</a>
+  </form>
+</div>
+
+<!-- ===================== ADMIN PANEL ===================== -->
+<div id="adminPanel" style="display:none;">
+  <div class="admin-topbar">
+    <div style="font-family:var(--font-d);">Manju's Admin</div>
+    <div style="display:flex; gap:14px; align-items:center;">
+      <a href="index.html" style="color:#D8CBB2; font-size:.82rem; text-decoration:none;">View Site</a>
+      <button class="btn btn-sm btn-ghost" style="border-color:#8A7A5C; color:#F6EFE1;" id="logoutBtn">Log Out</button>
+    </div>
+  </div>
+  <div class="admin-tabs-mobile" id="moduleAreaMobile"></div>
+  <div class="admin-shell">
+    <div class="admin-tabs" id="moduleArea"></div>
+    <div class="admin-content" id="moduleContent"></div>
+  </div>
+</div>
+
+<script type="module" src="admin.js"></script>
+</body>
+</html>
