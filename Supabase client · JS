@@ -1,0 +1,12 @@
+// =====================================================================
+// SUPABASE CLIENT — shared by app.js (public site) and admin.js (admin)
+// Fill in your project's URL and anon (public) key below.
+// Find both under: Supabase Dashboard → Project Settings → API.
+// Never put your service_role key in frontend code — only the anon key.
+// =====================================================================
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL"; // e.g. https://xxxxxxxx.supabase.co
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
